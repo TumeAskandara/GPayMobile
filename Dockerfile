@@ -4,7 +4,7 @@ FROM openjdk:17-jre-slim
 COPY target/*.jar app.jar
 
 # Expose port
-EXPOSE 8080
+EXPOSE 15009
 
 # Run the application
 ENTRYPOINT ["java", "-jar", "/app.jar"]

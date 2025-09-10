@@ -3,7 +3,6 @@ package com.example.gpay.controller;
 import com.example.gpay.model.User;
 import com.example.gpay.services.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
