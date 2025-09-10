@@ -1,0 +1,392 @@
+#name: GPay Mobile CI/CD Pipeline
+#
+#on:
+#  push:
+#    branches: [ main, develop ]
+#  pull_request:
+#    branches: [ main ]
+#
+#env:
+#  JAVA_VERSION: '17'
+#  MAVEN_VERSION: '3.9.4'
+#
+#jobs:
+#  test:
+#    runs-on: ubuntu-latest
+#    name: Run Tests
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up JDK
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: ${{ env.JAVA_VERSION }}
+#          distribution: 'temurin'
+#
+#      - name: Cache Maven dependencies
+#        uses: actions/cache@v3
+#        with:
+#          path: ~/.m2
+#          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+#          restore-keys: ${{ runner.os }}-m2
+#
+#      - name: Run tests
+#        run: ./mvnw clean test
+#
+#      - name: Generate test report
+#        uses: dorny/test-reporter@v1
+#        if: success() || failure()
+#        with:
+#          name: Maven Tests
+#          path: target/surefire-reports/*.xml
+#          reporter: java-junit
+#
+#      - name: Upload test results
+#        uses: actions/upload-artifact@v3
+#        if: always()
+#        with:
+#          name: test-results
+#          path: target/surefire-reports/
+#
+#  code-quality:
+#    runs-on: ubuntu-latest
+#    name: Code Quality Check
+#    needs: test
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#
+#      - name: Set up JDK
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: ${{ env.JAVA_VERSION }}
+#          distribution: 'temurin'
+#
+#      - name: Cache Maven dependencies
+#        uses: actions/cache@v3
+#        with:
+#          path: ~/.m2
+#          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+#          restore-keys: ${{ runner.os }}-m2
+#
+#      - name: Cache SonarCloud packages
+#        uses: actions/cache@v3
+#        with:
+#          path: ~/.sonar/cache
+#          key: ${{ runner.os }}-sonar
+#          restore-keys: ${{ runner.os }}-sonar
+#
+#      - name: Build and analyze
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#        run: ./mvnw clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=gpay-mobile
+#
+#  build:
+#    runs-on: ubuntu-latest
+#    name: Build Application
+#    needs: [test, code-quality]
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up JDK
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: ${{ env.JAVA_VERSION }}
+#          distribution: 'temurin'
+#
+#      - name: Cache Maven dependencies
+#        uses: actions/cache@v3
+#        with:
+#          path: ~/.m2
+#          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+#          restore-keys: ${{ runner.os }}-m2
+#
+#      - name: Build application
+#        run: ./mvnw clean package -DskipTests
+#
+#      - name: Upload build artifacts
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: jar-artifact
+#          path: target/*.jar
+#
+#  docker-build:
+#    runs-on: ubuntu-latest
+#    name: Build Docker Image
+#    needs: build
+#    if: github.ref == 'refs/heads/main'
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Download build artifacts
+#        uses: actions/download-artifact@v3
+#        with:
+#          name: jar-artifact
+#          path: target/
+#
+#      - name: Set up Docker Buildx
+#        uses: docker/setup-buildx-action@v3
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKER_USERNAME }}
+#          password: ${{ secrets.DOCKER_PASSWORD }}
+#
+#      - name: Extract metadata
+#        id: meta
+#        uses: docker/metadata-action@v5
+#        with:
+#          images: ${{ secrets.DOCKER_USERNAME }}/gpay-mobile
+#          tags: |
+#            type=ref,event=branch
+#            type=ref,event=pr
+#            type=sha,prefix={{branch}}-
+#            type=raw,value=latest,enable={{is_default_branch}}
+#
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@v5
+#        with:
+#          context: .
+#          push: true
+#          tags: ${{ steps.meta.outputs.tags }}
+#          labels: ${{ steps.meta.outputs.labels }}
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#
+#  security-scan:
+#    runs-on: ubuntu-latest
+#    name: Security Scan
+#    needs: build
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Download build artifacts
+#        uses: actions/download-artifact@v3
+#        with:
+#          name: jar-artifact
+#          path: target/
+#
+#      - name: Run Trivy vulnerability scanner
+#        uses: aquasecurity/trivy-action@master
+#        with:
+#          scan-type: 'fs'
+#          scan-ref: '.'
+#          format: 'sarif'
+#          output: 'trivy-results.sarif'
+#
+#      - name: Upload Trivy scan results to GitHub Security
+#        uses: github/codeql-action/upload-sarif@v2
+#        with:
+#          sarif_file: 'trivy-results.sarif'
+#
+#  deploy-staging:
+#    runs-on: ubuntu-latest
+#    name: Deploy to Staging
+#    needs: [docker-build, security-scan]
+#    if: github.ref == 'refs/heads/develop'
+#    environment: staging
+#
+#    steps:
+#      - name: Deploy to InterServer staging
+#        uses: appleboy/ssh-action@v1.0.0
+#        with:
+#          host: ${{ secrets.INTERSERVER_STAGING_HOST }}
+#          username: ${{ secrets.INTERSERVER_STAGING_USER }}
+#          password: ${{ secrets.INTERSERVER_STAGING_PASSWORD }}
+#          port: 22
+#          script: |
+#            # Stop existing application
+#            pkill -f "java.*gpay-mobile" || true
+#
+#            # Remove old JAR files
+#            rm -f ~/gpay-mobile-*.jar
+#
+#            # Download latest JAR from Docker Hub or build artifact
+#            docker pull ${{ secrets.DOCKER_USERNAME }}/gpay-mobile:develop
+#            docker create --name temp-container ${{ secrets.DOCKER_USERNAME }}/gpay-mobile:develop
+#            docker cp temp-container:/app/app.jar ~/gpay-mobile-staging.jar
+#            docker rm temp-container
+#
+#            # Start application with MongoDB connection
+#            nohup java -jar ~/gpay-mobile-staging.jar \
+#              --spring.profiles.active=staging \
+#              --spring.data.mongodb.uri=${{ secrets.STAGING_MONGODB_URI }} \
+#              --spring.data.mongodb.database=${{ secrets.STAGING_MONGODB_DATABASE }} \
+#              --server.port=8080 \
+#              > ~/gpay-staging.log 2>&1 &
+#
+#            # Wait for application to start
+#            sleep 30
+#
+#  deploy-production:
+#    runs-on: ubuntu-latest
+#    name: Deploy to Production
+#    needs: [docker-build, security-scan]
+#    if: github.ref == 'refs/heads/main'
+#    environment: production
+#
+#    steps:
+#      - name: Deploy to InterServer production
+#        uses: appleboy/ssh-action@v1.0.0
+#        with:
+#          host: ${{ secrets.INTERSERVER_PROD_HOST }}
+#          username: ${{ secrets.INTERSERVER_PROD_USER }}
+#          password: ${{ secrets.INTERSERVER_PROD_PASSWORD }}
+#          port: 22
+#          script: |
+#            # Create backup of current application
+#            if [ -f ~/gpay-mobile-prod.jar ]; then
+#              cp ~/gpay-mobile-prod.jar ~/gpay-mobile-backup-$(date +%Y%m%d_%H%M%S).jar
+#            fi
+#
+#            # Stop existing application gracefully
+#            pkill -TERM -f "java.*gpay-mobile" || true
+#            sleep 10
+#            pkill -KILL -f "java.*gpay-mobile" || true
+#
+#            # Download latest JAR
+#            docker pull ${{ secrets.DOCKER_USERNAME }}/gpay-mobile:latest
+#            docker create --name temp-container ${{ secrets.DOCKER_USERNAME }}/gpay-mobile:latest
+#            docker cp temp-container:/app/app.jar ~/gpay-mobile-prod.jar
+#            docker rm temp-container
+#
+#            # Start production application
+#            nohup java -jar ~/gpay-mobile-prod.jar \
+#              --spring.profiles.active=production \
+#              --spring.data.mongodb.uri=${{ secrets.PROD_MONGODB_URI }} \
+#              --spring.data.mongodb.database=${{ secrets.PROD_MONGODB_DATABASE }} \
+#              --server.port=8080 \
+#              --logging.file.name=~/gpay-prod.log \
+#              > ~/gpay-startup.log 2>&1 &
+#
+#            # Wait for application to start
+#            sleep 45
+#
+#      - name: Health check
+#        run: |
+#          # Check if application is responding
+#          for i in {1..10}; do
+#            if curl -f -m 10 http://${{ secrets.INTERSERVER_PROD_HOST }}:8080/actuator/health; then
+#              echo "Health check passed"
+#              exit 0
+#            fi
+#            echo "Health check attempt $i failed, retrying..."
+#            sleep 10
+#          done
+#          echo "Health check failed after 10 attempts"
+#          exit 1
+#
+#  rollback-production:
+#    runs-on: ubuntu-latest
+#    name: Rollback Production (Manual)
+#    needs: deploy-production
+#    if: failure() && github.ref == 'refs/heads/main'
+#    environment: production
+#    when: manual
+#
+#    steps:
+#      - name: Rollback to previous version
+#        uses: appleboy/ssh-action@v1.0.0
+#        with:
+#          host: ${{ secrets.INTERSERVER_PROD_HOST }}
+#          username: ${{ secrets.INTERSERVER_PROD_USER }}
+#          password: ${{ secrets.INTERSERVER_PROD_PASSWORD }}
+#          port: 22
+#          script: |
+#            # Stop current application
+#            pkill -f "java.*gpay-mobile" || true
+#
+#            # Find latest backup
+#            BACKUP_FILE=$(ls -t ~/gpay-mobile-backup-*.jar | head -1)
+#
+#            if [ -n "$BACKUP_FILE" ]; then
+#              echo "Rolling back to: $BACKUP_FILE"
+#              cp "$BACKUP_FILE" ~/gpay-mobile-prod.jar
+#
+#              # Start with backup version
+#              nohup java -jar ~/gpay-mobile-prod.jar \
+#                --spring.profiles.active=production \
+#                --spring.data.mongodb.uri=${{ secrets.PROD_MONGODB_URI }} \
+#                --spring.data.mongodb.database=${{ secrets.PROD_MONGODB_DATABASE }} \
+#                --server.port=8080 \
+#                > ~/gpay-rollback.log 2>&1 &
+#
+#              sleep 30
+#              echo "Rollback completed"
+#            else
+#              echo "No backup file found for rollback"
+#              exit 1
+#            fi
+
+name: Simple GPay CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: ./mvnw clean package -DskipTests
+
+      - name: Deploy to InterServer
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            # Stop existing app
+            pkill -f "java.*gpay" || true
+            
+            # Backup current jar if exists
+            if [ -f ~/gpay-mobile.jar ]; then
+              cp ~/gpay-mobile.jar ~/gpay-mobile-backup.jar
+            fi
+            
+            # Download new jar (you'll upload this manually first time)
+            # For now, assuming you upload the jar manually to server
+            
+            # Start the application
+            cd ~
+            nohup java -jar gpay-mobile.jar \
+              --server.port=8080 \
+              --spring.data.mongodb.uri=mongodb://localhost:27017/mobilemoney \
+              > gpay.log 2>&1 &
+            
+            # Wait and check if started
+            sleep 10
+            if pgrep -f "java.*gpay" > /dev/null; then
+              echo "Application started successfully"
+            else
+              echo "Application failed to start"
+              exit 1
+            fi

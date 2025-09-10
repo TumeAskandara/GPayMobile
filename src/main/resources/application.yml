@@ -1,0 +1,164 @@
+#server:
+#  port: 15009
+#
+#spring:
+#  data:
+#    mongodb:
+#      uri: mongodb://localhost:27017/mobilemoney
+#  application:
+#    name: mobile-money-platform
+#
+#jwt:
+#  secret: mySecretKey123456789012345678901234567890
+#  expiration: 900000 # 15 minutes
+#
+#campay:
+#  api-url: https://demo.campay.net/api
+#  username: Duj7FBln_rZZZtU-YTo1bOZghCjGIDIAxEtsd-xI3tR6wXVNW-MYtddi8v9O8m57jTUgX-1PsQmqgbIX5xNQHQ
+#  password: 1SXpD-lc67M13BP9PzB5Dwgci0Af9EBhPwsHJKlqrpd6ookJELp0fE0YA409WF71CCNtEthw4C-TH6wA44E_Ww
+#  app-id: lqHfIeO83zcaVX5dzKL_Jmup17QoW9W1zhs_wA7ttu-Wmgb3owmQ3Gw6kDiYLQ7N5XKIEQvAxy-rdBkaG3qnaQ
+#  timeout: 30000 # 30 seconds
+#
+#logging:
+#  level:
+#    com.mobilemoney: DEBUG
+#    org.springframework.web.reactive.function.client: DEBUG
+#
+#
+## Add this to your existing application.yml
+#springdoc:
+#  api-docs:
+#    path: /api-docs
+#  swagger-ui:
+#    path: /swagger-ui.html
+#    operationsSorter: method
+#    tagsSorter: alpha
+#    tryItOutEnabled: true
+#    filter: true
+#    displayRequestDuration: true
+#  show-actuator: true
+#
+#twilio:
+#  account-sid: AC7ee4b9b857f93c4a799298722259ff3d
+#  api-key: SK9e7c8e860192c379b5fbbf942bb0a35d
+#  api-secret: BbY9LN8wPYwQ8k6KNxiXNTwOMiKWN2cs
+#  phone-number: +237654774284
+#  enabled: true
+
+
+server:
+  port: 15009
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/mobilemoney
+  application:
+    name: mobile-money-platform
+
+jwt:
+  secret: mySecretKey123456789012345678901234567890
+  expiration: 900000 # 15 minutes
+
+campay:
+  api-url: https://demo.campay.net/api
+  username: Duj7FBln_rZZZtU-YTo1bOZghCjGIDIAxEtsd-xI3tR6wXVNW-MYtddi8v9O8m57jTUgX-1PsQmqgbIX5xNQHQ
+  password: 1SXpD-lc67M13BP9PzB5Dwgci0Af9EBhPwsHJKlqrpd6ookJELp0fE0YA409WF71CCNtEthw4C-TH6wA44E_Ww
+  app-id: lqHfIeO83zcaVX5dzKL_Jmup17QoW9W1zhs_wA7ttu-Wmgb3owmQ3Gw6kDiYLQ7N5XKIEQvAxy-rdBkaG3qnaQ
+  timeout: 30000 # 30 seconds
+
+logging:
+  level:
+    com.mobilemoney: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+    com.example.gpay: DEBUG
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    tryItOutEnabled: true
+    filter: true
+    displayRequestDuration: true
+  show-actuator: true
+
+# Twilio Configuration
+twilio:
+  account-sid: AC7ee4b9b857f93c4a799298722259ff3d
+  api-key: SK9e7c8e860192c379b5fbbf942bb0a35d
+  api-secret: BbY9LN8wPYwQ8k6KNxiXNTwOMiKWN2cs
+  phone-number: +237654774284
+  enabled: true
+
+# OTP Configuration
+otp:
+  length: 6
+  expiry-minutes: 5
+  max-attempts: 3
+  cleanup-interval: 300000 # 5 minutes in milliseconds
+
+# SMS Configuration
+sms:
+  enabled: true
+  provider: twilio
+  rate-limit:
+    per-phone: 5 # max 5 SMS per phone number per hour
+    per-hour: 100 # max 100 SMS per hour globally
+
+# Notification Configuration
+notification:
+  async: true
+  retry:
+    max-attempts: 3
+    delay: 1000 # 1 second
+  templates:
+    otp: "Your GPay login OTP is: %s. Valid for %d minutes. Do not share this code."
+    deposit-success: "Deposit successful! Amount: %.2f XAF has been added to your wallet. Thank you for using GPay."
+    deposit-failed: "Deposit failed! Your deposit of %.2f XAF could not be processed. Please try again or contact support."
+    withdrawal-success: "Withdrawal successful! Amount: %.2f XAF has been withdrawn from your wallet."
+    withdrawal-failed: "Withdrawal failed! Your withdrawal of %.2f XAF could not be processed. Please try again or contact support."
+    transfer-sent: "Transfer sent! You have successfully sent %.2f XAF to %s."
+    transfer-received: "Money received! You have received %.2f XAF from %s."
+    balance-update: "Your account balance has been updated. New balance: %.2f XAF"
+    low-balance: "Low balance warning! Your current balance is %.2f XAF. Please top up your wallet."
+
+# Security Configuration
+security:
+  otp:
+    required-for-login: false # Set to true to make OTP mandatory for all logins
+    required-for-transactions: false # Set to true to require OTP for transactions
+  session:
+    timeout: 30 # minutes
+  rate-limiting:
+    login-attempts: 5 # max login attempts per hour
+    transaction-attempts: 10 # max transaction attempts per hour
+
+# Application Configuration
+app:
+  name: "GPay Mobile Money"
+  version: "1.0.0"
+  environment: "development" # development, staging, production
+
+# Async Configuration
+async:
+  core-pool-size: 5
+  max-pool-size: 10
+  queue-capacity: 25
+  thread-name-prefix: "gpay-async-"
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  info:
+    env:
+      enabled: true
